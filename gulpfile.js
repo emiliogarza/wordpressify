@@ -14,6 +14,7 @@ const del = require('del');
 const fs = require('fs');
 const gulp = require('gulp');
 const gutil = require('gulp-util');
+const imagemin = require('gulp-imagemin');
 const inject = require('gulp-inject-string');
 const partialimport = require('postcss-easy-import');
 const plumber = require('gulp-plumber');
@@ -114,6 +115,13 @@ gulp.task('disable-cron', () => {
 				.pipe(inject.after('define(\'DB_COLLATE\', \'\');', '\ndefine(\'DISABLE_WP_CRON\', true);'))
 				.pipe(gulp.dest('build/wordpress'));
 		}
+	});
+});
+
+gulp.task('fresh-install', () => {
+	del(['src/**']).then(() => {
+		gulp.src('tools/fresh-theme/**')
+		.pipe(gulp.dest('src'))
 	});
 });
 
@@ -238,13 +246,24 @@ gulp.task('build-prod', [
 ]);
 
 gulp.task('copy-theme-prod', () => {
-	gulp.src('src/theme/**')
+	gulp.src(['src/theme/**', '!src/theme/img/**'])
 		.pipe(gulp.dest('dist/themes/' + themeName))
 });
 
 gulp.task('copy-fonts-prod', () => {
 	gulp.src('src/fonts/**')
 		.pipe(gulp.dest('dist/themes/' + themeName + '/fonts'))
+});
+
+gulp.task('process-images', ['copy-theme-prod'], () => {
+	return gulp.src('src/theme/img/**')
+		.pipe(plumber({ errorHandler: onError }))
+		.pipe(imagemin([
+			imagemin.svgo({ plugins: [{ removeViewBox: true }] })
+		], {
+			verbose: true
+		}))
+		.pipe(gulp.dest('dist/themes/' + themeName + '/img'));
 });
 
 gulp.task('style-prod', () => {
@@ -278,7 +297,7 @@ gulp.task('plugins-prod', () => {
 		.pipe(gulp.dest('dist/plugins'));
 });
 
-gulp.task('zip-theme', ['copy-theme-prod', 'copy-fonts-prod', 'style-prod', 'header-scripts-prod', 'footer-scripts-prod', 'plugins-prod'], () => {
+gulp.task('zip-theme', ['copy-theme-prod', 'copy-fonts-prod', 'process-images', 'style-prod', 'header-scripts-prod', 'footer-scripts-prod', 'plugins-prod'], () => {
 	gulp.src('dist/themes/' + themeName + '/**')
 		.pipe(zip(themeName + '.zip'))
 		.pipe(gulp.dest('dist'))
